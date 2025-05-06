@@ -78,7 +78,7 @@ data:
           "targets": [
             {
               "expr": "rate(otelcol_receiver_accepted_spans[1m])",
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{ .Release.Name}}",
               "refId": "A"
             }
           ],
