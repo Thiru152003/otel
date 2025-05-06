@@ -112,7 +112,14 @@ grafana:
 
 prometheusOperator:
   serviceMonitor:
-    enabled: false  # Set to true if you want ServiceMonitor created
+    enabled: false  # Set to true if using Prometheus Operator
+    interval: 30s
+    scrapeTimeout: 10s
+    selector:
+      matchLabels: {}
+
+  podMonitor:
+    enabled: false  # Set to true if using PodMonitor
     interval: 30s
     scrapeTimeout: 10s
     selector:
