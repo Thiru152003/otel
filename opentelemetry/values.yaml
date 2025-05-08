@@ -1,39 +1,39 @@
-# Default values for opentelemetry-collector.
+# Default values for opentelemetry-collector
 image:
-  repository: otel/opentelemetry-collector
-  tag: 0.86.0
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+  tag: 0.86.0  # Consider using a more recent version if available
   pullPolicy: IfNotPresent
+  pullSecrets: []  # Add if pulling from private registry
 
-mode: deployment # Can be deployment, daemonset, or statefulset
+mode: deployment  # deployment, daemonset, statefulset, or sidecar
 
 serviceAccount:
   create: true
   name: ""
+  annotations: {}  # Add IAM role annotations if needed (especially for AWS)
 
 rbac:
   create: true
+  rules: []  # Add custom rules if needed
 
 service:
   type: LoadBalancer
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    # Consider adding internal annotation if collectors should be internal only
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
   ports:
-    - name: otlp-grpc
-      port: 4317
-      targetPort: 4317
-    - name: otlp-http
-      port: 4318
-      targetPort: 4318
-    - name: metrics
-      port: 8888
-      targetPort: 8888
-    - name: jaeger-thrift
-      port: 14268
-      targetPort: 14268
-    - name: zipkin
-      port: 9411
-      targetPort: 9411
+    otlp-grpc: 4317
+    otlp-http: 4318
+    metrics: 8888
+    jaeger-thrift: 14268
+    zipkin: 9411
+  # Add if you need internal cluster service
+  internal:
+    type: ClusterIP
+    annotations: {}
+    ports: {}  # Same ports as above if needed
 
 config:
   exporters:
@@ -41,6 +41,9 @@ config:
       loglevel: info
     prometheus:
       endpoint: "0.0.0.0:8889"
+    # Consider adding other exporters like:
+    # otlp:
+    #   endpoint: otel-collector:4317
   receivers:
     otlp:
       protocols:
@@ -49,40 +52,59 @@ config:
     jaeger:
       protocols:
         thrift_http:
-    zipkin: {}
+    zipkin:
+    # Consider adding hostmetrics for node monitoring
+    hostmetrics:
+      collection_interval: 10s
+      scrapers:
+        cpu: {}
+        memory: {}
+        disk: {}
+        network: {}
+        load: {}
+  processors:
+    batch: {}  # Recommended for production
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 400
+      spike_limit_mib: 100
   service:
     pipelines:
       traces:
         receivers: [otlp, jaeger, zipkin]
-        processors: []
+        processors: [batch]
         exporters: [logging]
       metrics:
-        receivers: [otlp]
-        processors: []
+        receivers: [otlp, hostmetrics]
+        processors: [batch]
         exporters: [logging, prometheus]
       logs:
         receivers: [otlp]
-        processors: []
+        processors: [batch]
         exporters: [logging]
 
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m  # Increased for production
+    memory: 1Gi
   requests:
     cpu: 200m
     memory: 256Mi
 
 autoscaling:
-  enabled: false
-  minReplicas: 1
+  enabled: true  # Enabled for production
+  minReplicas: 2  # At least 2 for HA
   maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 60
 
 podDisruptionBudget:
-  enabled: false
+  enabled: true  # Important for production
   minAvailable: 1
+
+nodeSelector: {}  # Add if needed
+tolerations: []   # Add if needed
+affinity: {}      # Add if needed
 
 grafana:
   enabled: true
@@ -112,15 +134,25 @@ grafana:
 
 prometheusOperator:
   serviceMonitor:
-    enabled: false  # Set to true if using Prometheus Operator
+    enabled: true  # Recommended if using Prometheus Operator
+    interval: 30s
+    scrapeTimeout: 10s
+    selector:
+      matchLabels: {}
+    relabelings: []
+    metricRelabelings: []
+
+  podMonitor:
+    enabled: false
     interval: 30s
     scrapeTimeout: 10s
     selector:
       matchLabels: {}
 
-  podMonitor:
-    enabled: false  # Set to true if using PodMonitor
-    interval: 30s
-    scrapeTimeout: 10s
-    selector:
-      matchLabels: {}
+# Add these if needed
+extraVolumes: []
+extraVolumeMounts: []
+env: []
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
